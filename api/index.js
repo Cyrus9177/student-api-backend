@@ -8,7 +8,7 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 function setCorsHeaders(req, res) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 }
 
@@ -134,6 +134,65 @@ module.exports = async function handler(req, res) {
     }
   }
 
+  if (req.method === 'PUT' || req.method === 'PATCH') {
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+      const studentId = (req.query && (req.query.studentId || req.query.id)) || body.studentId || body.id;
+      const { studentName, subjectName, section } = body;
+
+      if (!studentId || typeof studentId !== 'string' || !mongoose.Types.ObjectId.isValid(studentId.trim())) {
+        return res.status(400).json({
+          success: false,
+          error: 'A valid MongoDB studentId is required for update.',
+        });
+      }
+
+      const updateData = {};
+      if (typeof studentName === 'string' && studentName.trim()) updateData.studentName = studentName.trim();
+      if (typeof subjectName === 'string' && subjectName.trim()) updateData.subjectName = subjectName.trim();
+      if (typeof section === 'string' && section.trim()) updateData.section = section.trim();
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'At least one field (studentName, subjectName, or section) must be provided to update.',
+        });
+      }
+
+      const cleanId = studentId.trim();
+      const updatedRecord = await AttendanceRecord.findByIdAndUpdate(
+        cleanId,
+        { $set: updateData },
+        { returnDocument: 'after', runValidators: true }
+      ).lean();
+
+      if (!updatedRecord) {
+        return res.status(404).json({
+          success: false,
+          error: `Student record with ID "${cleanId}" was not found.`,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Successfully updated record for "${updatedRecord.studentName}".`,
+        updatedRecord,
+      });
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid JSON request body.',
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update student record.',
+        details: error.message,
+      });
+    }
+  }
+
   if (req.method === 'DELETE') {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
@@ -176,7 +235,7 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  res.setHeader('Allow', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Allow', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   return res.status(405).json({
     success: false,
     error: `Method ${req.method} Not Allowed.`,
