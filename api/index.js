@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const connectToDatabase = require('../db');
 const AttendanceRecord = require('../models/AttendanceRecord');
 
@@ -7,7 +8,7 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 function setCorsHeaders(req, res) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 }
 
@@ -133,7 +134,49 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  res.setHeader('Allow', 'GET, POST, OPTIONS');
+  if (req.method === 'DELETE') {
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+      const studentId = (req.query && (req.query.studentId || req.query.id)) || body.studentId || body.id;
+
+      if (!studentId || typeof studentId !== 'string' || !mongoose.Types.ObjectId.isValid(studentId.trim())) {
+        return res.status(400).json({
+          success: false,
+          error: 'A valid MongoDB studentId is required for deletion.',
+        });
+      }
+
+      const cleanId = studentId.trim();
+      const deletedRecord = await AttendanceRecord.findByIdAndDelete(cleanId).lean();
+
+      if (!deletedRecord) {
+        return res.status(404).json({
+          success: false,
+          error: `Student record with ID "${cleanId}" was not found.`,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Successfully deleted student "${deletedRecord.studentName}" from the roster.`,
+        deletedRecord,
+      });
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid JSON request body.',
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to delete student record.',
+        details: error.message,
+      });
+    }
+  }
+
+  res.setHeader('Allow', 'GET, POST, DELETE, OPTIONS');
   return res.status(405).json({
     success: false,
     error: `Method ${req.method} Not Allowed.`,
