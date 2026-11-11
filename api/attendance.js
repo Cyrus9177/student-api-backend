@@ -8,7 +8,7 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 function setCorsHeaders(req, res) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 }
 
@@ -19,8 +19,24 @@ module.exports = async function handler(req, res) {
     return res.status(200).end();
   }
 
+  // Friendly browser GET guide for /api/attendance
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      endpoint: '/api/attendance',
+      supportedMethods: ['POST', 'DELETE', 'OPTIONS'],
+      message: 'The /api/attendance endpoint handles POST (record session date) and DELETE (remove session date). To view all student attendance records via GET, visit /api.',
+      routes: {
+        view_all_rosters: 'GET https://student-api-backend-fawn.vercel.app/api',
+        record_session: 'POST /api/attendance (Body: { studentId, date, status })',
+        delete_session: 'DELETE /api/attendance (Body or Query: { studentId, date })',
+        web_portal: 'https://cyrus9177.github.io/student-frontend/',
+      },
+    });
+  }
+
   if (req.method !== 'POST' && req.method !== 'DELETE') {
-    res.setHeader('Allow', 'POST, DELETE, OPTIONS');
+    res.setHeader('Allow', 'GET, POST, DELETE, OPTIONS');
     return res.status(405).json({
       success: false,
       error: `Method ${req.method} Not Allowed.`,
